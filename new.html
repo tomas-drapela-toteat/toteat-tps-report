@@ -1,0 +1,73 @@
+<!--CIFRADO-v1--><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>Reporte interno</title>
+<style>
+ :root{color-scheme:light dark}
+ body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;
+      font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;background:#FAFAFA;color:#18181B}
+ @media(prefers-color-scheme:dark){body{background:#18181B;color:#E4E4E7}
+   .card{background:#27272A;border-color:#3F3F46}
+   input{background:#18181B;border-color:#3F3F46;color:#E4E4E7}}
+ .card{background:#fff;border:1px solid #EBEBEB;border-radius:14px;padding:28px 26px;
+       width:min(360px,92vw);box-shadow:0 1px 3px rgba(0,0,0,.06);text-align:center}
+ .lg{font-size:19px;font-weight:800;letter-spacing:-.4px;margin-bottom:4px}
+ .lg em{font-style:normal;color:#E4572E}
+ .sub{font-size:12px;color:#A1A1AA;margin-bottom:18px}
+ input{width:100%;box-sizing:border-box;padding:10px 12px;border:1px solid #E4E4E7;
+       border-radius:9px;font-size:14px;margin-bottom:10px}
+ button{width:100%;padding:10px;border:0;border-radius:9px;background:#18181B;color:#fff;
+        font-size:14px;font-weight:700;cursor:pointer}
+ button:disabled{opacity:.55;cursor:progress}
+ .err{color:#DC2626;font-size:12px;min-height:16px;margin-top:8px}
+</style>
+<div class="card">
+  <div class="lg">tot<em>eat</em></div>
+  <div class="sub">Reporte interno</div>
+  <form id="f">
+    <input id="pw" type="password" placeholder="Clave" autofocus autocomplete="current-password">
+    <button id="b" type="submit">Ver</button>
+  </form>
+  <div class="err" id="e"></div>
+</div>
+<script>
+const ARCHIVO = "new.html.enc";
+const LLAVE_SS = 'toteat_dash_pw';
+const b64 = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
+
+async function abrir(pw) {
+  const blob = await (await fetch(ARCHIVO + '?v=' + Date.now())).json();
+  const base = await crypto.subtle.importKey('raw', new TextEncoder().encode(pw),
+    'PBKDF2', false, ['deriveKey']);
+  const key = await crypto.subtle.deriveKey(
+    { name:'PBKDF2', salt:b64(blob.salt), iterations:blob.iter, hash:'SHA-256' },
+    base, { name:'AES-GCM', length:256 }, false, ['decrypt']);
+  // AES-GCM valida el tag: si la clave es incorrecta, esto lanza.
+  const gz = await crypto.subtle.decrypt({ name:'AES-GCM', iv:b64(blob.iv) }, key, b64(blob.ct));
+  const ds = new DecompressionStream('gzip');
+  return await new Response(new Blob([gz]).stream().pipeThrough(ds)).text();
+}
+
+async function intentar(pw, silencioso) {
+  const b = document.getElementById('b'), e = document.getElementById('e');
+  b.disabled = true; e.textContent = '';
+  try {
+    const html = await abrir(pw);
+    sessionStorage.setItem(LLAVE_SS, pw);
+    document.open(); document.write(html); document.close();
+  } catch (err) {
+    sessionStorage.removeItem(LLAVE_SS);
+    b.disabled = false;
+    if (!silencioso) e.textContent = 'Clave incorrecta.';
+  }
+}
+
+document.getElementById('f').addEventListener('submit', ev => {
+  ev.preventDefault();
+  intentar(document.getElementById('pw').value, false);
+});
+
+// Paginas hermanas: si ya se desbloqueo una en esta pestana, entra directo.
+const guardada = sessionStorage.getItem(LLAVE_SS);
+if (guardada) intentar(guardada, true);
+</script>
